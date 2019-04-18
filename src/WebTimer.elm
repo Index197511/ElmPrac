@@ -1,165 +1,241 @@
-module WebTimer exposing (main)
+module Main exposing (Model, Msg(..), init, main, subscriptions, update, view)
 
 import Browser
 import Html exposing (..)
+import Html.Attributes exposing (..)
 import Html.Events exposing (..)
-import Maybe
-import Round
+import List
 import Time
-
+import Random exposing (..)
+import Random.List exposing (..)
+import String
 
 main : Program () Model Msg
 main =
     Browser.element
         { init = init
-        , view = view
         , update = update
+        , view = view
         , subscriptions = subscriptions
         }
 
 
-
---Model
-
-
 type alias Model =
-    { time : String
-    , behavior : Bool
-    , timeMemos : List String
+    { deck : List Int
+    , gameState : Bool
+    , playersHand : List Int
+    , playersPoint : Int
+    , playersState : Bool
+    , dealersHand : List Int
+    , isShow : Bool
+    , dealersPoint : Int
+    , dealersState : Bool
+    , result : String
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { time = "0.0", behavior = False, timeMemos = [] }, Cmd.none )
+    let
+        manyTen = List.repeat 12 10
 
+        stack =
+                List.range 1 10
+                |> List.repeat 4
+                |> List.concat
 
-
---Update
-
-
-rounding : Int -> Float -> String
-rounding decimalPoint num =
-    Round.round decimalPoint num
-        |> str2Flo
-        |> \n ->
-                if n - toFloat (floor n) > 0 then
-                    String.fromFloat n
-
-                else
-                    String.fromFloat n ++ ".0"
-
-
-
-str2Flo : String -> Float
-str2Flo string =
-    String.toFloat string
-        |> Maybe.withDefault 0
-
-
-alignment : Float -> String
-alignment num =
-    if num - toFloat (floor num) > 0 then
-        String.fromFloat num
-
-    else
-        String.fromFloat num ++ ".0"
+    in
+    ( { deck = List.append stack manyTen
+      , gameState = False
+      , playersHand = []
+      , playersPoint = 0
+      , playersState = True
+      , dealersHand = []
+      , isShow = False
+      , dealersPoint = 0
+      , dealersState = True
+      , result = ""
+      }
+    , Cmd.none
+    )
 
 
 type Msg
-    = Start
-    | Stop
-    | Tick Time.Posix
+    = Shuffle Time.Posix
+    | ConstructDeck (List Int)
+    | Start
+    | DealersTurn Time.Posix
+    | Hit
+    | Result
     | Reset
-    | Save
-    | Clear
-    | Resume
+
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        Shuffle _ ->
+            ( model, generate ConstructDeck (shuffle model.deck) )
+
+        ConstructDeck newDeck ->
+            ( { model | deck = newDeck }, Cmd.none )
+
         Start ->
-            if not model.behavior then
-                ( { model | behavior = True, time = "0.0" }, Cmd.none )
+            let
+                initCard = List.take 4 model.deck
+                playersDraw =
+                    List.take 2 initCard
+                dealersDraw =
+                    List.drop 2 initCard
+                    |> List.take 2
+            in
+            ( { model
+                | gameState = True
+                , playersHand = List.append model.playersHand playersDraw
+                , dealersHand = List.append model.dealersHand dealersDraw
+                , playersPoint = model.playersPoint + List.sum playersDraw
+                , dealersPoint = model.dealersPoint + List.sum dealersDraw
+                , deck = List.drop 4 model.deck
+              }
+            , Cmd.none
+            )
+
+        DealersTurn _ ->
+            if model.dealersPoint < 17 then
+                let
+                    newCard =
+                        List.take 1 model.deck
+                in
+                ( { model
+                    | dealersHand = List.append model.dealersHand newCard
+                    , deck = List.drop 1 model.deck
+                    , dealersPoint = model.dealersPoint + List.sum newCard
+                  }
+                , Cmd.none
+                )
+
+            else if model.dealersPoint > 21 then
+                ( { model | dealersState = False }, Cmd.none )
 
             else
                 ( model, Cmd.none )
 
-        Stop ->
-            ( { model | behavior = False }, Cmd.none )
+        Hit ->
+            let
+                newCard =
+                    List.take 1 model.deck
+                flagPoint =
+                    model.playersPoint + List.sum (List.take 1 model.deck)
+            in
+              if model.playersPoint <= 21 then
+                  if flagPoint > 21 then
+                      ( { model
+                          | playersHand = List.append model.playersHand newCard
+                          , deck = List.drop 1 model.deck
+                          , playersPoint = model.playersPoint + List.sum newCard
+                          , playersState = False
+                        }
+                        , Cmd.none
+                        )
+                        else
+                          ( { model
+                          | playersHand = List.append model.playersHand newCard
+                          , deck = List.drop 1 model.deck
+                          , playersPoint = model.playersPoint + List.sum newCard
+                        }
+                        , Cmd.none
+                        )
+
+              else
+                (model, Cmd.none)
+
+        Result ->
+            if model.playersState && model.dealersState then
+                if model.playersPoint < model.dealersPoint then
+                    ( { model | isShow = True, result = "Dealer Wins!!" }, Cmd.none )
+
+                else if model.playersPoint > model.dealersPoint then
+                    ( { model | isShow = True, result = "Player Wins!!" }, Cmd.none )
+
+                else
+                    ( { model | isShow = True, result = "Draw..." }, Cmd.none )
+
+            else if not model.playersState && model.dealersState then
+                ( { model | isShow = True, result = "Dealer Wins" }, Cmd.none )
+
+            else if  model.playersState && not model.dealersState then
+                ( { model | isShow = True, result = "Player Wins" }, Cmd.none )
+
+            else
+                ( { model | isShow = True, result = "Draw..." }, Cmd.none )
 
         Reset ->
-            ( { model | time = "0.0" }, Cmd.none )
-
-        Tick _ ->
-            if model.behavior then
-                let
-                    newTime =
-                        str2Flo model.time
-                            |> (+) 0.1
-                            |> rounding 1
-                in
-                ( { model | time = newTime }, Cmd.none )
-
-            else
-                ( model, Cmd.none )
-
-        Save ->
-            if str2Flo model.time /= 0 then
-                let
-                    newTimeMemos =
-                        model.time :: model.timeMemos
-                in
-                ( { model | timeMemos = newTimeMemos }, Cmd.none )
-
-            else
-                ( model, Cmd.none )
-
-        Clear ->
-            ( { model | timeMemos = [] }, Cmd.none )
-
-        Resume ->
-            if model.behavior then
-                ( model, Cmd.none )
-
-            else
-                ( { model | behavior = True }, Cmd.none )
-
-
-
---Subscriptions
+            ( { model
+                | gameState = False
+                , playersHand = []
+                , playersPoint = 0
+                , playersState = True
+                , dealersHand = []
+                , isShow = False
+                , dealersPoint = 0
+                , dealersState = True
+                , result = ""
+              }
+            , Cmd.none
+            )
 
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    if model.behavior then
-        Time.every 100 Tick
+    if model.gameState then
+      Time.every 0 DealersTurn
 
     else
-        Time.every 0 Tick
+      Time.every 0 Shuffle
 
-
-
---View
 
 
 view : Model -> Html Msg
 view model =
     let
-        showMemos =
-            List.map str2Flo model.timeMemos
-                |> List.sort
-                |> List.map alignment
-                |> List.map (\w -> li [] [ text w ])
+        playersHandFormat =
+            List.map String.fromInt model.playersHand
+                |> String.join " "
+
+        dealersHandFormat =
+            if model.isShow then
+              List.map String.fromInt model.dealersHand
+                |> String.join " "
+            else
+              "* * *"
     in
     div []
-        [ h1 [] [ text model.time ]
-        , button [ onClick Start ] [ text "Start" ]
-        , button [ onClick Stop ] [ text "Stop" ]
-        , button [ onClick Resume ] [ text "Resume" ]
+        [ text "BlackJack"
+        , br [] []
+        , text "DealersHand"
+        , br [] []
+        , text dealersHandFormat
+        , br [] []
+        , text (
+            if model.isShow then
+                String.fromInt model.dealersPoint
+            else
+              "*")
+        , br [] []
+        , text "PlayersHand"
+        , br [] []
+        , text playersHandFormat
+        , br [] []
+        , text (String.fromInt model.playersPoint)
+        , br [] []
+        , button [ onClick Start] [ text "Start"]
+        , br [] []
+        , button [ onClick Hit ] [ text "Hit" ]
+        , br [] []
+        , button [ onClick Result ] [ text "Stand" ]
+        , br [] []
         , button [ onClick Reset ] [ text "Reset" ]
-        , button [ onClick Save ] [ text "Save" ]
-        , button [ onClick Clear ] [ text "Clear" ]
-        , ul [] showMemos
+        , br [] []
+        ,text model.result
         ]
+
