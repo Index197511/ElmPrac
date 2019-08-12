@@ -5,10 +5,11 @@ import Html exposing (..)
 import Html.Attributes exposing (..)
 import Html.Events exposing (..)
 import List
-import Time
 import Random exposing (..)
 import Random.List exposing (..)
 import String
+import Time
+
 
 main : Program () Model Msg
 main =
@@ -37,13 +38,13 @@ type alias Model =
 init : () -> ( Model, Cmd Msg )
 init _ =
     let
-        manyTen = List.repeat 12 10
+        manyTen =
+            List.repeat 12 10
 
         stack =
-                List.range 1 10
+            List.range 1 10
                 |> List.repeat 4
                 |> List.concat
-
     in
     ( { deck = List.append stack manyTen
       , gameState = False
@@ -70,7 +71,6 @@ type Msg
     | Reset
 
 
-
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -81,24 +81,32 @@ update msg model =
             ( { model | deck = newDeck }, Cmd.none )
 
         Start ->
-            let
-                initCard = List.take 4 model.deck
-                playersDraw =
-                    List.take 2 initCard
-                dealersDraw =
-                    List.drop 2 initCard
-                    |> List.take 2
-            in
-            ( { model
-                | gameState = True
-                , playersHand = List.append model.playersHand playersDraw
-                , dealersHand = List.append model.dealersHand dealersDraw
-                , playersPoint = model.playersPoint + List.sum playersDraw
-                , dealersPoint = model.dealersPoint + List.sum dealersDraw
-                , deck = List.drop 4 model.deck
-              }
-            , Cmd.none
-            )
+            case model.gameState of
+                False ->
+                    let
+                        initCard =
+                            List.take 4 model.deck
+
+                        playersDraw =
+                            List.take 2 initCard
+
+                        dealersDraw =
+                            List.drop 2 initCard
+                                |> List.take 2
+                    in
+                    ( { model
+                        | gameState = True
+                        , playersHand = List.append model.playersHand playersDraw
+                        , dealersHand = List.append model.dealersHand dealersDraw
+                        , playersPoint = model.playersPoint + List.sum playersDraw
+                        , dealersPoint = model.dealersPoint + List.sum dealersDraw
+                        , deck = List.drop 4 model.deck
+                      }
+                    , Cmd.none
+                    )
+
+                _ ->
+                    ( model, Cmd.none )
 
         DealersTurn _ ->
             if model.dealersPoint < 17 then
@@ -124,30 +132,32 @@ update msg model =
             let
                 newCard =
                     List.take 1 model.deck
+
                 flagPoint =
                     model.playersPoint + List.sum (List.take 1 model.deck)
             in
-              if model.playersPoint <= 21 then
-                  if flagPoint > 21 then
-                      ( { model
-                          | playersHand = List.append model.playersHand newCard
-                          , deck = List.drop 1 model.deck
-                          , playersPoint = model.playersPoint + List.sum newCard
-                          , playersState = False
-                        }
-                        , Cmd.none
-                        )
-                        else
-                          ( { model
-                          | playersHand = List.append model.playersHand newCard
-                          , deck = List.drop 1 model.deck
-                          , playersPoint = model.playersPoint + List.sum newCard
-                        }
-                        , Cmd.none
-                        )
+            if model.playersPoint <= 21 then
+                if flagPoint > 21 then
+                    ( { model
+                        | playersHand = List.append model.playersHand newCard
+                        , deck = List.drop 1 model.deck
+                        , playersPoint = model.playersPoint + List.sum newCard
+                        , playersState = False
+                      }
+                    , Cmd.none
+                    )
 
-              else
-                (model, Cmd.none)
+                else
+                    ( { model
+                        | playersHand = List.append model.playersHand newCard
+                        , deck = List.drop 1 model.deck
+                        , playersPoint = model.playersPoint + List.sum newCard
+                      }
+                    , Cmd.none
+                    )
+
+            else
+                ( model, Cmd.none )
 
         Result ->
             if model.playersState && model.dealersState then
@@ -163,7 +173,7 @@ update msg model =
             else if not model.playersState && model.dealersState then
                 ( { model | isShow = True, result = "Dealer Wins" }, Cmd.none )
 
-            else if  model.playersState && not model.dealersState then
+            else if model.playersState && not model.dealersState then
                 ( { model | isShow = True, result = "Player Wins" }, Cmd.none )
 
             else
@@ -188,11 +198,10 @@ update msg model =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     if model.gameState then
-      Time.every 0 DealersTurn
+        Time.every 0 DealersTurn
 
     else
-      Time.every 0 Shuffle
-
+        Time.every 0 Shuffle
 
 
 view : Model -> Html Msg
@@ -204,10 +213,11 @@ view model =
 
         dealersHandFormat =
             if model.isShow then
-              List.map String.fromInt model.dealersHand
-                |> String.join " "
+                List.map String.fromInt model.dealersHand
+                    |> String.join " "
+
             else
-              "* * *"
+                "* * *"
     in
     div []
         [ text "BlackJack"
@@ -216,11 +226,13 @@ view model =
         , br [] []
         , text dealersHandFormat
         , br [] []
-        , text (
-            if model.isShow then
+        , text
+            (if model.isShow then
                 String.fromInt model.dealersPoint
-            else
-              "*")
+
+             else
+                "*"
+            )
         , br [] []
         , text "PlayersHand"
         , br [] []
@@ -228,7 +240,7 @@ view model =
         , br [] []
         , text (String.fromInt model.playersPoint)
         , br [] []
-        , button [ onClick Start] [ text "Start"]
+        , button [ onClick Start ] [ text "Start" ]
         , br [] []
         , button [ onClick Hit ] [ text "Hit" ]
         , br [] []
@@ -236,6 +248,5 @@ view model =
         , br [] []
         , button [ onClick Reset ] [ text "Reset" ]
         , br [] []
-        ,text model.result
+        , text model.result
         ]
-
